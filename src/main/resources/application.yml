@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: transaction-aggregation-api
+
+  datasource:
+    url: jdbc:h2:mem:transactiondb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  # Redis disabled for local dev — simple in-memory cache, no Redis required
+  cache:
+    type: simple
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+  health:
+    redis:
+      enabled: false   # Redis not required for local dev — cache.type=simple is used instead
+
+bank:
+  api:
+    base-url: http://localhost:9090
+    connect-timeout-ms: 3000
+    read-timeout-ms: 5000
+    key:
+    mock:
+      enabled: true   # reads from src/main/resources/mock/transactions.json
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      bankApi:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+  retry:
+    instances:
+      bankApi:
+        max-attempts: 3
+        wait-duration: 500ms
+
+logging:
+  level:
+    application: DEBUG
+    infrastructure: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG

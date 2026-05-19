@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+
+  # ─── PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: transaction-postgres
+    environment:
+      POSTGRES_DB: transactiondb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transactiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis Cache ───────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: transaction-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─── Transaction Aggregation API ──────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: transaction-api
+    ports:
+      - "8080:8080"
+    environment:
+      # PostgreSQL connection — references the postgres service by name
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transactiondb
+      # Redis connection — references the redis service by name
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Bank API — points to mock server (replace with real URL in production)
+      BANK_API_BASE_URL: http://localhost:9090
+      # JVM flag to enable Virtual Threads
+      JAVA_OPTS: "-Dspring.threads.virtual.enabled=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
